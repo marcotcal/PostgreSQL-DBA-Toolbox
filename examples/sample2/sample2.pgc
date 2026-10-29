@@ -1,0 +1,77 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+// Declare variables that SQL will share with C
+EXEC SQL
+    BEGIN DECLARE SECTION;
+        int emp_id;
+        char emp_name[100];
+        const char *target_db = "book@localhost:5432";
+        const char *user = "myuser";
+        const char *passwd = "mypasswd";
+EXEC SQL
+    END DECLARE SECTION;
+
+// Include the comunication error structure from SQL
+EXEC SQL INCLUDE sqlca;
+
+int main() {
+    // 1. Connect to database 
+    EXEC SQL 
+        CONNECT TO :target_db USER :user USING :passwd;
+
+    if (sqlca.sqlcode < 0) {
+        fprintf(stderr, 
+           "Error connecting to database: %ld\n", 
+           sqlca.sqlcode);
+        exit(1);
+    }
+
+    printf("Connection via ECPG Ok!\n\n");
+
+    // 2. Declare a cursor to iterate over table
+    EXEC SQL 
+        DECLARE emp_cursor CURSOR FOR
+        SELECT 
+            id, 
+            intervener_name
+        FROM interveners.employee;
+
+    // 3. Open cursor
+    EXEC SQL 
+        OPEN emp_cursor;
+
+    printf("--- Employee List ---\n");
+
+    // 4. Loop reading data line by line
+    while (1) {
+        EXEC SQL 
+           FETCH NEXT 
+           FROM emp_cursor INTO :emp_id, :emp_name;
+
+        // End of data (sqlcode 100 means NOT FOUND)
+        if (sqlca.sqlcode == 100) {
+            break;
+        }
+
+        // There is an error
+        if (sqlca.sqlcode < 0) {
+            fprintf(
+                stderr, 
+                "Error reading data. Code: %ld\n", 
+                sqlca.sqlcode);
+            break;
+        }
+
+        printf("ID: %d | Name: %s \n", 
+            emp_id, emp_name);
+    }
+
+    // 5. Close cursor and connection
+    EXEC SQL 
+        CLOSE emp_cursor;
+    EXEC SQL 
+        DISCONNECT CURRENT;
+
+    return 0;
+}
